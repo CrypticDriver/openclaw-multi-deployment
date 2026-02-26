@@ -8,7 +8,8 @@ Metadata:
           default: 'Basic Configuration'
         Parameters:
           - KeyPairName
-          - InstanceName
+          - InstanceCount
+          - InstanceNamePrefix
           - NotificationEmail
       - Label:
           default: 'Instance Configuration'
