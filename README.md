@@ -2,6 +2,31 @@
 
 **在单个 VPC 中批量部署多个 OpenClaw 实例的企业级解决方案**
 
+## 🚀 Quick Start (One-Click Deploy)
+
+**Total time:** 15 minutes | **Cost:** ~$103/month
+
+```bash
+# Clone repository
+git clone https://github.com/CrypticDriver/openclaw-multi-deployment.git
+cd openclaw-multi-deployment
+
+# One-command deployment
+./scripts/quick-start.sh \
+  --key-pair your-keypair-name \
+  --email your-email@example.com
+```
+
+**What you get:**
+- ✅ Complete VPC infrastructure
+- ✅ Application Load Balancer
+- ✅ First OpenClaw instance running
+- ✅ Web UI access URL
+
+**See [ONE_CLICK_DEPLOY.md](ONE_CLICK_DEPLOY.md) for detailed instructions**
+
+---
+
 ## 🎯 项目特点
 
 ### 相比原版的改进

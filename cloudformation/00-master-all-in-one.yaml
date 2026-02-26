@@ -1,0 +1,250 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'OpenClaw Multi-Deployment - Master Stack (All-in-One Deployment)'
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: 'Basic Configuration'
+        Parameters:
+          - KeyPairName
+          - InstanceName
+          - NotificationEmail
+      - Label:
+          default: 'Instance Configuration'
+        Parameters:
+          - InstanceType
+          - BedrockModel
+          - VolumeSize
+      - Label:
+          default: 'Scaling Configuration'
+        Parameters:
+          - MinSize
+          - DesiredCapacity
+          - MaxSize
+      - Label:
+          default: 'Advanced Options'
+        Parameters:
+          - UseSpotInstances
+          - EnableDetailedMonitoring
+          - DeployVPCEndpoints
+
+Parameters:
+  KeyPairName:
+    Description: EC2 Key Pair for SSH access
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: Must be an existing EC2 key pair
+
+  InstanceName:
+    Description: Unique name for your OpenClaw instance
+    Type: String
+    Default: 'openclaw-1'
+    MinLength: 3
+    MaxLength: 32
+    AllowedPattern: '^[a-z0-9-]+$'
+    ConstraintDescription: 'Only lowercase letters, numbers, and hyphens'
+
+  NotificationEmail:
+    Description: Email for CloudWatch alarms (optional)
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    ConstraintDescription: 'Must be a valid email address or empty'
+
+  InstanceType:
+    Description: EC2 instance type
+    Type: String
+    Default: 't4g.medium'
+    AllowedValues:
+      - t4g.small
+      - t4g.medium
+      - t4g.large
+      - t4g.xlarge
+      - c7g.large
+      - c7g.xlarge
+
+  BedrockModel:
+    Description: Bedrock model ID
+    Type: String
+    Default: 'global.amazon.nova-2-lite-v1:0'
+    AllowedValues:
+      - 'global.amazon.nova-2-lite-v1:0'
+      - 'us.amazon.nova-pro-v1:0'
+      - 'global.anthropic.claude-sonnet-4-5-20250929-v1:0'
+
+  MinSize:
+    Description: Minimum number of instances
+    Type: Number
+    Default: 1
+    MinValue: 0
+    MaxValue: 10
+
+  DesiredCapacity:
+    Description: Desired number of instances
+    Type: Number
+    Default: 1
+    MinValue: 0
+    MaxValue: 10
+
+  MaxSize:
+    Description: Maximum number of instances
+    Type: Number
+    Default: 3
+    MinValue: 1
+    MaxValue: 10
+
+  VolumeSize:
+    Description: EBS volume size in GB
+    Type: Number
+    Default: 30
+    MinValue: 20
+    MaxValue: 500
+
+  UseSpotInstances:
+    Description: Use Spot Instances (70% cost savings)
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+
+  EnableDetailedMonitoring:
+    Description: Enable detailed CloudWatch monitoring
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+
+  DeployVPCEndpoints:
+    Description: Deploy VPC Endpoints (recommended for production)
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+
+Conditions:
+  HasEmail: !Not [!Equals [!Ref NotificationEmail, '']]
+  DeployEndpoints: !Equals [!Ref DeployVPCEndpoints, 'true']
+
+Resources:
+  # =====================================================
+  # Foundation Stack (VPC + Network)
+  # =====================================================
+  FoundationStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub 'https://${AWS::Region}-openclaw-templates.s3.${AWS::Region}.amazonaws.com/01-vpc-foundation.yaml'
+      Parameters:
+        AvailabilityZones: !Join
+          - ','
+          - - !Select [0, !GetAZs '']
+            - !Select [1, !GetAZs '']
+        DeployNATRedundancy: 'false'
+        EnableVPCFlowLogs: 'true'
+      Tags:
+        - Key: Project
+          Value: OpenClaw-Multi
+        - Key: Component
+          Value: Foundation
+
+  # =====================================================
+  # Shared Resources Stack (ALB + Endpoints)
+  # =====================================================
+  SharedStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: FoundationStack
+    Properties:
+      TemplateURL: !Sub 'https://${AWS::Region}-openclaw-templates.s3.${AWS::Region}.amazonaws.com/02-shared-resources.yaml'
+      Parameters:
+        FoundationStackName: !GetAtt FoundationStack.Outputs.StackName
+        DeployVPCEndpoints: !Ref DeployVPCEndpoints
+        NotificationEmail: !If [HasEmail, !Ref NotificationEmail, 'AWS::NoValue']
+      Tags:
+        - Key: Project
+          Value: OpenClaw-Multi
+        - Key: Component
+          Value: Shared
+
+  # =====================================================
+  # OpenClaw Instance Stack
+  # =====================================================
+  InstanceStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: SharedStack
+    Properties:
+      TemplateURL: !Sub 'https://${AWS::Region}-openclaw-templates.s3.${AWS::Region}.amazonaws.com/03-openclaw-instance.yaml'
+      Parameters:
+        FoundationStackName: !GetAtt FoundationStack.Outputs.StackName
+        SharedStackName: !GetAtt SharedStack.Outputs.StackName
+        InstanceName: !Ref InstanceName
+        InstanceType: !Ref InstanceType
+        BedrockModel: !Ref BedrockModel
+        KeyPairName: !Ref KeyPairName
+        MinSize: !Ref MinSize
+        DesiredCapacity: !Ref DesiredCapacity
+        MaxSize: !Ref MaxSize
+        VolumeSize: !Ref VolumeSize
+        EnableDetailedMonitoring: !Ref EnableDetailedMonitoring
+        UseSpotInstances: !Ref UseSpotInstances
+      Tags:
+        - Key: Project
+          Value: OpenClaw-Multi
+        - Key: Component
+          Value: Instance
+        - Key: InstanceName
+          Value: !Ref InstanceName
+
+Outputs:
+  AccessURL:
+    Description: Access URL for your OpenClaw instance
+    Value: !Sub
+      - '${ALBURL}/${InstanceName}/'
+      - ALBURL: !GetAtt SharedStack.Outputs.LoadBalancerURL
+        InstanceName: !Ref InstanceName
+
+  GetTokenCommand:
+    Description: Command to retrieve gateway token
+    Value: !Sub |
+      aws ssm get-parameter --region ${AWS::Region} --name /openclaw/${InstanceName}/token --with-decryption --query 'Parameter.Value' --output text
+
+  FullAccessCommand:
+    Description: Command to get full access URL with token
+    Value: !Sub |
+      TOKEN=$(aws ssm get-parameter --region ${AWS::Region} --name /openclaw/${InstanceName}/token --with-decryption --query 'Parameter.Value' --output text)
+      echo "${SharedStack.Outputs.LoadBalancerURL}/${InstanceName}/?token=$TOKEN"
+
+  InstanceStackName:
+    Description: CloudFormation stack name for the instance
+    Value: !GetAtt InstanceStack.Outputs.StackName
+
+  FoundationStackName:
+    Description: CloudFormation stack name for foundation
+    Value: !GetAtt FoundationStack.Outputs.StackName
+
+  SharedStackName:
+    Description: CloudFormation stack name for shared resources
+    Value: !GetAtt SharedStack.Outputs.StackName
+
+  DeploymentInstructions:
+    Description: Next steps
+    Value: |
+      1. Wait ~2 minutes for OpenClaw to fully start
+      2. Run the GetTokenCommand to get your gateway token
+      3. Open the AccessURL in your browser with ?token=YOUR_TOKEN
+      4. Connect messaging channels (WhatsApp/Telegram/Discord)
+      5. Start chatting!
+
+  MonthlyCostEstimate:
+    Description: Estimated monthly cost
+    Value: !Sub
+      - 'Foundation: $70, Instance: $33, Total: ~$103/month'
+      - {}
+
+  QuickCommands:
+    Description: Useful management commands
+    Value: !Sub |
+      # Check health
+      aws cloudformation describe-stacks --stack-name ${InstanceStack.Outputs.StackName}
+      
+      # Get access URL
+      aws cloudformation describe-stacks --stack-name ${AWS::StackName} --query 'Stacks[0].Outputs[?OutputKey==`AccessURL`].OutputValue' --output text
+      
+      # Connect via SSM
+      INSTANCE_ID=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names ${InstanceStack.Outputs.AutoScalingGroupName} --query 'AutoScalingGroups[0].Instances[0].InstanceId' --output text)
+      aws ssm start-session --target $INSTANCE_ID
