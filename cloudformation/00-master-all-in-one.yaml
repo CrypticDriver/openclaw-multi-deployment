@@ -334,45 +334,6 @@ Resources:
         - Key: InstanceName
           Value: !Sub '${InstanceNamePrefix}-5'
 
-Outputs:
-  DashboardURL:
-    Description: Management Dashboard URL
-    Value: !GetAtt DashboardStack.Outputs.DashboardURL
-    Export:
-      Name: !Sub '${AWS::StackName}-Dashboard-URL'
-
-  InstanceCount:
-    Description: Number of instances deployed
-    Value: !Ref InstanceCount
-
-  InstanceNames:
-    Description: Instance names
-    Value: !Sub '${InstanceNamePrefix}-1 to ${InstanceNamePrefix}-${InstanceCount}'
-
-  AccessInstructions:
-    Description: How to access instances
-    Value: !Sub |
-      1. Open Dashboard: ${DashboardStack.Outputs.DashboardURL}
-      2. Click "打开 Web UI" for any instance
-      3. All instances are automatically listed!
-
-  GetTokenCommand:
-    Description: Command to retrieve gateway token for instance 1
-    Value: !Sub |
-      aws ssm get-parameter --region ${AWS::Region} --name /openclaw/${InstanceNamePrefix}-1/token --with-decryption --query 'Parameter.Value' --output text
-
-  MonthlyCostEstimate:
-    Description: Estimated monthly cost
-    Value: !Sub
-      - 'Foundation: $70, Instances (${Count} × $33): $${InstanceCost}, Total: ~$${TotalCost}/month'
-      - Count: !Ref InstanceCount
-        InstanceCost: !Sub 
-          - '${Cost}'
-          - Cost: !If [Deploy10, 330, !If [Deploy9, 297, !If [Deploy8, 264, !If [Deploy7, 231, !If [Deploy6, 198, !If [Deploy5, 165, !If [Deploy4, 132, !If [Deploy3, 99, !If [Deploy2, 66, 33]]]]]]]]]
-        TotalCost: !Sub 
-          - '${Cost}'
-          - Cost: !If [Deploy10, 400, !If [Deploy9, 367, !If [Deploy8, 334, !If [Deploy7, 301, !If [Deploy6, 268, !If [Deploy5, 235, !If [Deploy4, 202, !If [Deploy3, 169, !If [Deploy2, 136, 103]]]]]]]]]
-
   InstanceStack6:
     Type: AWS::CloudFormation::Stack
     Condition: Deploy6
@@ -487,4 +448,44 @@ Outputs:
       Tags:
         - Key: Project
           Value: OpenClaw-Multi
+
+
+Outputs:
+  DashboardURL:
+    Description: Management Dashboard URL
+    Value: !GetAtt DashboardStack.Outputs.DashboardURL
+    Export:
+      Name: !Sub '${AWS::StackName}-Dashboard-URL'
+
+  InstanceCount:
+    Description: Number of instances deployed
+    Value: !Ref InstanceCount
+
+  InstanceNames:
+    Description: Instance names
+    Value: !Sub '${InstanceNamePrefix}-1 to ${InstanceNamePrefix}-${InstanceCount}'
+
+  AccessInstructions:
+    Description: How to access instances
+    Value: !Sub |
+      1. Open Dashboard: ${DashboardStack.Outputs.DashboardURL}
+      2. Click "打开 Web UI" for any instance
+      3. All instances are automatically listed!
+
+  GetTokenCommand:
+    Description: Command to retrieve gateway token for instance 1
+    Value: !Sub |
+      aws ssm get-parameter --region ${AWS::Region} --name /openclaw/${InstanceNamePrefix}-1/token --with-decryption --query 'Parameter.Value' --output text
+
+  MonthlyCostEstimate:
+    Description: Estimated monthly cost
+    Value: !Sub
+      - 'Foundation: $70, Instances (${Count} × $33): $${InstanceCost}, Total: ~$${TotalCost}/month'
+      - Count: !Ref InstanceCount
+        InstanceCost: !Sub 
+          - '${Cost}'
+          - Cost: !If [Deploy10, 330, !If [Deploy9, 297, !If [Deploy8, 264, !If [Deploy7, 231, !If [Deploy6, 198, !If [Deploy5, 165, !If [Deploy4, 132, !If [Deploy3, 99, !If [Deploy2, 66, 33]]]]]]]]]
+        TotalCost: !Sub 
+          - '${Cost}'
+          - Cost: !If [Deploy10, 400, !If [Deploy9, 367, !If [Deploy8, 334, !If [Deploy7, 301, !If [Deploy6, 268, !If [Deploy5, 235, !If [Deploy4, 202, !If [Deploy3, 169, !If [Deploy2, 136, 103]]]]]]]]]
 
