@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenClaw Multi-Deployment - Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .instances-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+        
+        .instance-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .instance-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+        }
+        
+        .instance-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        
+        .instance-name {
+            font-size: 1.4em;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 500;
+        }
+        
+        .status-healthy {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status-degraded {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .status-unhealthy {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .instance-info {
+            margin-bottom: 20px;
+        }
+        
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .info-label {
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .info-value {
+            color: #333;
+            font-weight: 500;
+        }
+        
+        .instance-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .btn {
+            flex: 1;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.95em;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        
+        .add-instance {
+            background: white;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .add-instance:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+        }
+        
+        .add-instance-icon {
+            font-size: 4em;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        
+        .loading {
+            text-align: center;
+            color: white;
+            font-size: 1.5em;
+            margin-top: 100px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🐕 OpenClaw Multi-Deployment</h1>
+            <p>统一管理面板</p>
+        </div>
+        
+        <div id="loading" class="loading">
+            加载中...
+        </div>
+        
+        <div id="instances" class="instances-grid" style="display: none;">
+            <!-- Instances will be loaded here -->
+        </div>
+    </div>
+
+    <script>
+        const AWS_REGION = 'us-west-2';
+        const ALB_URL = window.location.origin;
+        
+        // Mock data (replace with actual API call)
+        const mockInstances = [
+            {
+                name: 'openclaw-prod-1',
+                status: 'healthy',
+                instances: 2,
+                cpu: '15%',
+                uptime: '5d 12h',
+                model: 'Nova 2 Lite'
+            },
+            {
+                name: 'openclaw-prod-2',
+                status: 'healthy',
+                instances: 1,
+                cpu: '8%',
+                uptime: '3d 8h',
+                model: 'Claude Sonnet'
+            },
+            {
+                name: 'openclaw-dev-1',
+                status: 'degraded',
+                instances: 1,
+                cpu: '78%',
+                uptime: '12h',
+                model: 'Nova 2 Lite'
+            }
+        ];
+        
+        function renderInstances(instances) {
+            const container = document.getElementById('instances');
+            container.innerHTML = '';
+            
+            instances.forEach(instance => {
+                const card = document.createElement('div');
+                card.className = 'instance-card';
+                card.innerHTML = `
+                    <div class="instance-header">
+                        <div class="instance-name">${instance.name}</div>
+                        <div class="status-badge status-${instance.status}">${getStatusText(instance.status)}</div>
+                    </div>
+                    <div class="instance-info">
+                        <div class="info-row">
+                            <span class="info-label">实例数</span>
+                            <span class="info-value">${instance.instances}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">CPU 使用</span>
+                            <span class="info-value">${instance.cpu}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">运行时间</span>
+                            <span class="info-value">${instance.uptime}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">模型</span>
+                            <span class="info-value">${instance.model}</span>
+                        </div>
+                    </div>
+                    <div class="instance-actions">
+                        <button class="btn btn-primary" onclick="openInstance('${instance.name}')">
+                            打开 Web UI
+                        </button>
+                        <button class="btn btn-secondary" onclick="manageInstance('${instance.name}')">
+                            管理
+                        </button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+            
+            // Add "Add Instance" card
+            const addCard = document.createElement('div');
+            addCard.className = 'add-instance';
+            addCard.innerHTML = `
+                <div class="add-instance-icon">+</div>
+                <div>部署新实例</div>
+            `;
+            addCard.onclick = addInstance;
+            container.appendChild(addCard);
+        }
+        
+        function getStatusText(status) {
+            const statusMap = {
+                'healthy': '健康',
+                'degraded': '降级',
+                'unhealthy': '不健康'
+            };
+            return statusMap[status] || status;
+        }
+        
+        function openInstance(name) {
+            // Get token from SSM and open instance
+            alert(`正在打开 ${name}...\n实际部署时会自动获取 token 并打开 Web UI`);
+            // window.open(`${ALB_URL}/${name}/?token=xxx`);
+        }
+        
+        function manageInstance(name) {
+            alert(`管理 ${name}\n可以执行: 扩缩容、查看日志、重启等操作`);
+        }
+        
+        function addInstance() {
+            alert('部署新实例\n将打开部署向导...');
+        }
+        
+        // Load instances
+        setTimeout(() => {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('instances').style.display = 'grid';
+            renderInstances(mockInstances);
+        }, 1000);
+    </script>
+</body>
+</html>
