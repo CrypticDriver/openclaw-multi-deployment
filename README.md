@@ -2,28 +2,71 @@
 
 **在单个 VPC 中批量部署多个 OpenClaw 实例的企业级解决方案**
 
-## 🚀 Quick Start (One-Click Deploy)
+---
 
-**Total time:** 15 minutes | **Cost:** ~$103/month
+## 🚀 One-Click Deploy (Launch Stack Button)
 
-```bash
-# Clone repository
-git clone https://github.com/CrypticDriver/openclaw-multi-deployment.git
-cd openclaw-multi-deployment
+**不需要命令行！直接点击按钮部署！**
 
-# One-command deployment
-./scripts/quick-start.sh \
-  --key-pair your-keypair-name \
-  --email your-email@example.com
-```
+### Launch in AWS Console
 
-**What you get:**
-- ✅ Complete VPC infrastructure
-- ✅ Application Load Balancer
-- ✅ First OpenClaw instance running
-- ✅ Web UI access URL
+点击下面的按钮，在 AWS CloudFormation 控制台一键部署完整系统：
 
-**See [ONE_CLICK_DEPLOY.md](ONE_CLICK_DEPLOY.md) for detailed instructions**
+| Region | Launch |
+|--------|--------|
+| **US West (Oregon)** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-west-2#/stacks/create/review?stackName=openclaw-complete&templateURL=https://raw.githubusercontent.com/CrypticDriver/openclaw-multi-deployment/master/cloudformation/00-master-all-in-one.yaml) |
+| **US East (N. Virginia)** | [![Launch Stack](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks/create/review?stackName=openclaw-complete&templateURL=https://raw.githubusercontent.com/CrypticDriver/openclaw-multi-deployment/master/cloudformation/00-master-all-in-one.yaml) |
+
+**步骤：**
+1. 点击上面的按钮
+2. 填写 Key Pair 名称（唯一必填项）
+3. 点击 "Create Stack"
+4. 等待 15 分钟
+5. 在 Outputs 标签页获取访问 URL
+
+**就这么简单！** 🎉
+
+---
+
+## 📦 What You Get
+
+一键部署后自动包含：
+
+✅ **VPC Foundation**
+- Multi-AZ 私有/公有子网
+- NAT Gateway（互联网访问）
+- VPC Flow Logs（安全审计）
+
+✅ **Shared Resources**
+- Application Load Balancer（统一入口）
+- VPC Endpoints（Bedrock/S3/SSM）
+- CloudWatch Logs（日志收集）
+- SNS Alerts（告警通知）
+
+✅ **Management Dashboard** 🆕
+- Web UI 管理面板
+- 自动发现所有实例
+- 一键打开 Web UI
+- 实时健康监控
+
+✅ **OpenClaw Instance**
+- Auto Scaling Group（自动扩缩容）
+- 预装 OpenClaw
+- Bedrock 集成
+- Web UI 访问
+
+---
+
+## 💰 Cost Estimate
+
+| Component | Monthly Cost |
+|-----------|-------------|
+| Foundation + ALB | $70 |
+| Dashboard (Lambda + API Gateway) | $0 |
+| First Instance (t4g.medium) | $33 |
+| **Total** | **~$103/month** |
+
+**节省提示：** 5 个实例以上，相比原版可节省 40-60% 成本！
 
 ---
 

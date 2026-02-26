@@ -129,7 +129,7 @@ Resources:
   FoundationStack:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub 'https://${AWS::Region}-openclaw-templates.s3.${AWS::Region}.amazonaws.com/01-vpc-foundation.yaml'
+      TemplateURL: https://raw.githubusercontent.com/CrypticDriver/openclaw-multi-deployment/master/cloudformation/01-vpc-foundation.yaml
       Parameters:
         AvailabilityZones: !Join
           - ','
@@ -150,7 +150,7 @@ Resources:
     Type: AWS::CloudFormation::Stack
     DependsOn: FoundationStack
     Properties:
-      TemplateURL: !Sub 'https://${AWS::Region}-openclaw-templates.s3.${AWS::Region}.amazonaws.com/02-shared-resources.yaml'
+      TemplateURL: https://raw.githubusercontent.com/CrypticDriver/openclaw-multi-deployment/master/cloudformation/02-shared-resources.yaml
       Parameters:
         FoundationStackName: !GetAtt FoundationStack.Outputs.StackName
         DeployVPCEndpoints: !Ref DeployVPCEndpoints
@@ -168,7 +168,7 @@ Resources:
     Type: AWS::CloudFormation::Stack
     DependsOn: SharedStack
     Properties:
-      TemplateURL: !Sub 'https://${AWS::Region}-openclaw-templates.s3.${AWS::Region}.amazonaws.com/04-dashboard.yaml'
+      TemplateURL: https://raw.githubusercontent.com/CrypticDriver/openclaw-multi-deployment/master/cloudformation/04-dashboard.yaml
       Parameters:
         SharedStackName: !GetAtt SharedStack.Outputs.StackName
       Tags:
@@ -184,7 +184,7 @@ Resources:
     Type: AWS::CloudFormation::Stack
     DependsOn: SharedStack
     Properties:
-      TemplateURL: !Sub 'https://${AWS::Region}-openclaw-templates.s3.${AWS::Region}.amazonaws.com/03-openclaw-instance.yaml'
+      TemplateURL: https://raw.githubusercontent.com/CrypticDriver/openclaw-multi-deployment/master/cloudformation/03-openclaw-instance.yaml
       Parameters:
         FoundationStackName: !GetAtt FoundationStack.Outputs.StackName
         SharedStackName: !GetAtt SharedStack.Outputs.StackName
