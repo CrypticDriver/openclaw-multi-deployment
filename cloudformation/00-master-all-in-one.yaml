@@ -35,12 +35,20 @@ Parameters:
     Type: AWS::EC2::KeyPair::KeyName
     ConstraintDescription: Must be an existing EC2 key pair
 
-  InstanceName:
-    Description: Unique name for your OpenClaw instance
+  InstanceCount:
+    Description: Number of OpenClaw instances to deploy
+    Type: Number
+    Default: 1
+    MinValue: 1
+    MaxValue: 10
+    ConstraintDescription: Must be between 1 and 10
+
+  InstanceNamePrefix:
+    Description: Prefix for instance names (will add -1, -2, -3...)
     Type: String
-    Default: 'openclaw-1'
+    Default: 'openclaw'
     MinLength: 3
-    MaxLength: 32
+    MaxLength: 24
     AllowedPattern: '^[a-z0-9-]+$'
     ConstraintDescription: 'Only lowercase letters, numbers, and hyphens'
 
@@ -121,6 +129,16 @@ Parameters:
 Conditions:
   HasEmail: !Not [!Equals [!Ref NotificationEmail, '']]
   DeployEndpoints: !Equals [!Ref DeployVPCEndpoints, 'true']
+  Deploy1: !Not [!Equals [!Ref InstanceCount, 0]]
+  Deploy2: !Or [!Equals [!Ref InstanceCount, 2], !Equals [!Ref InstanceCount, 3], !Equals [!Ref InstanceCount, 4], !Equals [!Ref InstanceCount, 5], !Equals [!Ref InstanceCount, 6], !Equals [!Ref InstanceCount, 7], !Equals [!Ref InstanceCount, 8], !Equals [!Ref InstanceCount, 9], !Equals [!Ref InstanceCount, 10]]
+  Deploy3: !Or [!Equals [!Ref InstanceCount, 3], !Equals [!Ref InstanceCount, 4], !Equals [!Ref InstanceCount, 5], !Equals [!Ref InstanceCount, 6], !Equals [!Ref InstanceCount, 7], !Equals [!Ref InstanceCount, 8], !Equals [!Ref InstanceCount, 9], !Equals [!Ref InstanceCount, 10]]
+  Deploy4: !Or [!Equals [!Ref InstanceCount, 4], !Equals [!Ref InstanceCount, 5], !Equals [!Ref InstanceCount, 6], !Equals [!Ref InstanceCount, 7], !Equals [!Ref InstanceCount, 8], !Equals [!Ref InstanceCount, 9], !Equals [!Ref InstanceCount, 10]]
+  Deploy5: !Or [!Equals [!Ref InstanceCount, 5], !Equals [!Ref InstanceCount, 6], !Equals [!Ref InstanceCount, 7], !Equals [!Ref InstanceCount, 8], !Equals [!Ref InstanceCount, 9], !Equals [!Ref InstanceCount, 10]]
+  Deploy6: !Or [!Equals [!Ref InstanceCount, 6], !Equals [!Ref InstanceCount, 7], !Equals [!Ref InstanceCount, 8], !Equals [!Ref InstanceCount, 9], !Equals [!Ref InstanceCount, 10]]
+  Deploy7: !Or [!Equals [!Ref InstanceCount, 7], !Equals [!Ref InstanceCount, 8], !Equals [!Ref InstanceCount, 9], !Equals [!Ref InstanceCount, 10]]
+  Deploy8: !Or [!Equals [!Ref InstanceCount, 8], !Equals [!Ref InstanceCount, 9], !Equals [!Ref InstanceCount, 10]]
+  Deploy9: !Or [!Equals [!Ref InstanceCount, 9], !Equals [!Ref InstanceCount, 10]]
+  Deploy10: !Equals [!Ref InstanceCount, 10]
 
 Resources:
   # =====================================================
@@ -178,17 +196,18 @@ Resources:
           Value: Dashboard
 
   # =====================================================
-  # OpenClaw Instance Stack
+  # OpenClaw Instance Stacks (Up to 10)
   # =====================================================
-  InstanceStack:
+  InstanceStack1:
     Type: AWS::CloudFormation::Stack
+    Condition: Deploy1
     DependsOn: SharedStack
     Properties:
       TemplateURL: https://raw.githubusercontent.com/CrypticDriver/openclaw-multi-deployment/master/cloudformation/03-openclaw-instance.yaml
       Parameters:
         FoundationStackName: !GetAtt FoundationStack.Outputs.StackName
         SharedStackName: !GetAtt SharedStack.Outputs.StackName
-        InstanceName: !Ref InstanceName
+        InstanceName: !Sub '${InstanceNamePrefix}-1'
         InstanceType: !Ref InstanceType
         BedrockModel: !Ref BedrockModel
         KeyPairName: !Ref KeyPairName
@@ -204,7 +223,115 @@ Resources:
         - Key: Component
           Value: Instance
         - Key: InstanceName
-          Value: !Ref InstanceName
+          Value: !Sub '${InstanceNamePrefix}-1'
+
+  InstanceStack2:
+    Type: AWS::CloudFormation::Stack
+    Condition: Deploy2
+    DependsOn: SharedStack
+    Properties:
+      TemplateURL: https://raw.githubusercontent.com/CrypticDriver/openclaw-multi-deployment/master/cloudformation/03-openclaw-instance.yaml
+      Parameters:
+        FoundationStackName: !GetAtt FoundationStack.Outputs.StackName
+        SharedStackName: !GetAtt SharedStack.Outputs.StackName
+        InstanceName: !Sub '${InstanceNamePrefix}-2'
+        InstanceType: !Ref InstanceType
+        BedrockModel: !Ref BedrockModel
+        KeyPairName: !Ref KeyPairName
+        MinSize: !Ref MinSize
+        DesiredCapacity: !Ref DesiredCapacity
+        MaxSize: !Ref MaxSize
+        VolumeSize: !Ref VolumeSize
+        EnableDetailedMonitoring: !Ref EnableDetailedMonitoring
+        UseSpotInstances: !Ref UseSpotInstances
+      Tags:
+        - Key: Project
+          Value: OpenClaw-Multi
+        - Key: Component
+          Value: Instance
+        - Key: InstanceName
+          Value: !Sub '${InstanceNamePrefix}-2'
+
+  InstanceStack3:
+    Type: AWS::CloudFormation::Stack
+    Condition: Deploy3
+    DependsOn: SharedStack
+    Properties:
+      TemplateURL: https://raw.githubusercontent.com/CrypticDriver/openclaw-multi-deployment/master/cloudformation/03-openclaw-instance.yaml
+      Parameters:
+        FoundationStackName: !GetAtt FoundationStack.Outputs.StackName
+        SharedStackName: !GetAtt SharedStack.Outputs.StackName
+        InstanceName: !Sub '${InstanceNamePrefix}-3'
+        InstanceType: !Ref InstanceType
+        BedrockModel: !Ref BedrockModel
+        KeyPairName: !Ref KeyPairName
+        MinSize: !Ref MinSize
+        DesiredCapacity: !Ref DesiredCapacity
+        MaxSize: !Ref MaxSize
+        VolumeSize: !Ref VolumeSize
+        EnableDetailedMonitoring: !Ref EnableDetailedMonitoring
+        UseSpotInstances: !Ref UseSpotInstances
+      Tags:
+        - Key: Project
+          Value: OpenClaw-Multi
+        - Key: Component
+          Value: Instance
+        - Key: InstanceName
+          Value: !Sub '${InstanceNamePrefix}-3'
+
+  InstanceStack4:
+    Type: AWS::CloudFormation::Stack
+    Condition: Deploy4
+    DependsOn: SharedStack
+    Properties:
+      TemplateURL: https://raw.githubusercontent.com/CrypticDriver/openclaw-multi-deployment/master/cloudformation/03-openclaw-instance.yaml
+      Parameters:
+        FoundationStackName: !GetAtt FoundationStack.Outputs.StackName
+        SharedStackName: !GetAtt SharedStack.Outputs.StackName
+        InstanceName: !Sub '${InstanceNamePrefix}-4'
+        InstanceType: !Ref InstanceType
+        BedrockModel: !Ref BedrockModel
+        KeyPairName: !Ref KeyPairName
+        MinSize: !Ref MinSize
+        DesiredCapacity: !Ref DesiredCapacity
+        MaxSize: !Ref MaxSize
+        VolumeSize: !Ref VolumeSize
+        EnableDetailedMonitoring: !Ref EnableDetailedMonitoring
+        UseSpotInstances: !Ref UseSpotInstances
+      Tags:
+        - Key: Project
+          Value: OpenClaw-Multi
+        - Key: Component
+          Value: Instance
+        - Key: InstanceName
+          Value: !Sub '${InstanceNamePrefix}-4'
+
+  InstanceStack5:
+    Type: AWS::CloudFormation::Stack
+    Condition: Deploy5
+    DependsOn: SharedStack
+    Properties:
+      TemplateURL: https://raw.githubusercontent.com/CrypticDriver/openclaw-multi-deployment/master/cloudformation/03-openclaw-instance.yaml
+      Parameters:
+        FoundationStackName: !GetAtt FoundationStack.Outputs.StackName
+        SharedStackName: !GetAtt SharedStack.Outputs.StackName
+        InstanceName: !Sub '${InstanceNamePrefix}-5'
+        InstanceType: !Ref InstanceType
+        BedrockModel: !Ref BedrockModel
+        KeyPairName: !Ref KeyPairName
+        MinSize: !Ref MinSize
+        DesiredCapacity: !Ref DesiredCapacity
+        MaxSize: !Ref MaxSize
+        VolumeSize: !Ref VolumeSize
+        EnableDetailedMonitoring: !Ref EnableDetailedMonitoring
+        UseSpotInstances: !Ref UseSpotInstances
+      Tags:
+        - Key: Project
+          Value: OpenClaw-Multi
+        - Key: Component
+          Value: Instance
+        - Key: InstanceName
+          Value: !Sub '${InstanceNamePrefix}-5'
 
 Outputs:
   DashboardURL:
@@ -213,60 +340,150 @@ Outputs:
     Export:
       Name: !Sub '${AWS::StackName}-Dashboard-URL'
 
-  AccessURL:
-    Description: Access URL for your OpenClaw instance
-    Value: !Sub
-      - '${ALBURL}/${InstanceName}/'
-      - ALBURL: !GetAtt SharedStack.Outputs.LoadBalancerURL
-        InstanceName: !Ref InstanceName
+  InstanceCount:
+    Description: Number of instances deployed
+    Value: !Ref InstanceCount
+
+  InstanceNames:
+    Description: Instance names
+    Value: !Sub '${InstanceNamePrefix}-1 to ${InstanceNamePrefix}-${InstanceCount}'
+
+  AccessInstructions:
+    Description: How to access instances
+    Value: !Sub |
+      1. Open Dashboard: ${DashboardStack.Outputs.DashboardURL}
+      2. Click "打开 Web UI" for any instance
+      3. All instances are automatically listed!
 
   GetTokenCommand:
-    Description: Command to retrieve gateway token
+    Description: Command to retrieve gateway token for instance 1
     Value: !Sub |
-      aws ssm get-parameter --region ${AWS::Region} --name /openclaw/${InstanceName}/token --with-decryption --query 'Parameter.Value' --output text
-
-  FullAccessCommand:
-    Description: Command to get full access URL with token
-    Value: !Sub |
-      TOKEN=$(aws ssm get-parameter --region ${AWS::Region} --name /openclaw/${InstanceName}/token --with-decryption --query 'Parameter.Value' --output text)
-      echo "${SharedStack.Outputs.LoadBalancerURL}/${InstanceName}/?token=$TOKEN"
-
-  InstanceStackName:
-    Description: CloudFormation stack name for the instance
-    Value: !GetAtt InstanceStack.Outputs.StackName
-
-  FoundationStackName:
-    Description: CloudFormation stack name for foundation
-    Value: !GetAtt FoundationStack.Outputs.StackName
-
-  SharedStackName:
-    Description: CloudFormation stack name for shared resources
-    Value: !GetAtt SharedStack.Outputs.StackName
-
-  DeploymentInstructions:
-    Description: Next steps
-    Value: |
-      1. Wait ~2 minutes for OpenClaw to fully start
-      2. Run the GetTokenCommand to get your gateway token
-      3. Open the AccessURL in your browser with ?token=YOUR_TOKEN
-      4. Connect messaging channels (WhatsApp/Telegram/Discord)
-      5. Start chatting!
+      aws ssm get-parameter --region ${AWS::Region} --name /openclaw/${InstanceNamePrefix}-1/token --with-decryption --query 'Parameter.Value' --output text
 
   MonthlyCostEstimate:
     Description: Estimated monthly cost
     Value: !Sub
-      - 'Foundation: $70, Instance: $33, Total: ~$103/month'
-      - {}
+      - 'Foundation: $70, Instances (${Count} × $33): $${InstanceCost}, Total: ~$${TotalCost}/month'
+      - Count: !Ref InstanceCount
+        InstanceCost: !Sub 
+          - '${Cost}'
+          - Cost: !If [Deploy10, 330, !If [Deploy9, 297, !If [Deploy8, 264, !If [Deploy7, 231, !If [Deploy6, 198, !If [Deploy5, 165, !If [Deploy4, 132, !If [Deploy3, 99, !If [Deploy2, 66, 33]]]]]]]]]
+        TotalCost: !Sub 
+          - '${Cost}'
+          - Cost: !If [Deploy10, 400, !If [Deploy9, 367, !If [Deploy8, 334, !If [Deploy7, 301, !If [Deploy6, 268, !If [Deploy5, 235, !If [Deploy4, 202, !If [Deploy3, 169, !If [Deploy2, 136, 103]]]]]]]]]
 
-  QuickCommands:
-    Description: Useful management commands
-    Value: !Sub |
-      # Check health
-      aws cloudformation describe-stacks --stack-name ${InstanceStack.Outputs.StackName}
-      
-      # Get access URL
-      aws cloudformation describe-stacks --stack-name ${AWS::StackName} --query 'Stacks[0].Outputs[?OutputKey==`AccessURL`].OutputValue' --output text
-      
-      # Connect via SSM
-      INSTANCE_ID=$(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names ${InstanceStack.Outputs.AutoScalingGroupName} --query 'AutoScalingGroups[0].Instances[0].InstanceId' --output text)
-      aws ssm start-session --target $INSTANCE_ID
+  InstanceStack6:
+    Type: AWS::CloudFormation::Stack
+    Condition: Deploy6
+    DependsOn: SharedStack
+    Properties:
+      TemplateURL: https://raw.githubusercontent.com/CrypticDriver/openclaw-multi-deployment/master/cloudformation/03-openclaw-instance.yaml
+      Parameters:
+        FoundationStackName: !GetAtt FoundationStack.Outputs.StackName
+        SharedStackName: !GetAtt SharedStack.Outputs.StackName
+        InstanceName: !Sub '${InstanceNamePrefix}-6'
+        InstanceType: !Ref InstanceType
+        BedrockModel: !Ref BedrockModel
+        KeyPairName: !Ref KeyPairName
+        MinSize: !Ref MinSize
+        DesiredCapacity: !Ref DesiredCapacity
+        MaxSize: !Ref MaxSize
+        VolumeSize: !Ref VolumeSize
+        EnableDetailedMonitoring: !Ref EnableDetailedMonitoring
+        UseSpotInstances: !Ref UseSpotInstances
+      Tags:
+        - Key: Project
+          Value: OpenClaw-Multi
+
+  InstanceStack7:
+    Type: AWS::CloudFormation::Stack
+    Condition: Deploy7
+    DependsOn: SharedStack
+    Properties:
+      TemplateURL: https://raw.githubusercontent.com/CrypticDriver/openclaw-multi-deployment/master/cloudformation/03-openclaw-instance.yaml
+      Parameters:
+        FoundationStackName: !GetAtt FoundationStack.Outputs.StackName
+        SharedStackName: !GetAtt SharedStack.Outputs.StackName
+        InstanceName: !Sub '${InstanceNamePrefix}-7'
+        InstanceType: !Ref InstanceType
+        BedrockModel: !Ref BedrockModel
+        KeyPairName: !Ref KeyPairName
+        MinSize: !Ref MinSize
+        DesiredCapacity: !Ref DesiredCapacity
+        MaxSize: !Ref MaxSize
+        VolumeSize: !Ref VolumeSize
+        EnableDetailedMonitoring: !Ref EnableDetailedMonitoring
+        UseSpotInstances: !Ref UseSpotInstances
+      Tags:
+        - Key: Project
+          Value: OpenClaw-Multi
+
+  InstanceStack8:
+    Type: AWS::CloudFormation::Stack
+    Condition: Deploy8
+    DependsOn: SharedStack
+    Properties:
+      TemplateURL: https://raw.githubusercontent.com/CrypticDriver/openclaw-multi-deployment/master/cloudformation/03-openclaw-instance.yaml
+      Parameters:
+        FoundationStackName: !GetAtt FoundationStack.Outputs.StackName
+        SharedStackName: !GetAtt SharedStack.Outputs.StackName
+        InstanceName: !Sub '${InstanceNamePrefix}-8'
+        InstanceType: !Ref InstanceType
+        BedrockModel: !Ref BedrockModel
+        KeyPairName: !Ref KeyPairName
+        MinSize: !Ref MinSize
+        DesiredCapacity: !Ref DesiredCapacity
+        MaxSize: !Ref MaxSize
+        VolumeSize: !Ref VolumeSize
+        EnableDetailedMonitoring: !Ref EnableDetailedMonitoring
+        UseSpotInstances: !Ref UseSpotInstances
+      Tags:
+        - Key: Project
+          Value: OpenClaw-Multi
+
+  InstanceStack9:
+    Type: AWS::CloudFormation::Stack
+    Condition: Deploy9
+    DependsOn: SharedStack
+    Properties:
+      TemplateURL: https://raw.githubusercontent.com/CrypticDriver/openclaw-multi-deployment/master/cloudformation/03-openclaw-instance.yaml
+      Parameters:
+        FoundationStackName: !GetAtt FoundationStack.Outputs.StackName
+        SharedStackName: !GetAtt SharedStack.Outputs.StackName
+        InstanceName: !Sub '${InstanceNamePrefix}-9'
+        InstanceType: !Ref InstanceType
+        BedrockModel: !Ref BedrockModel
+        KeyPairName: !Ref KeyPairName
+        MinSize: !Ref MinSize
+        DesiredCapacity: !Ref DesiredCapacity
+        MaxSize: !Ref MaxSize
+        VolumeSize: !Ref VolumeSize
+        EnableDetailedMonitoring: !Ref EnableDetailedMonitoring
+        UseSpotInstances: !Ref UseSpotInstances
+      Tags:
+        - Key: Project
+          Value: OpenClaw-Multi
+
+  InstanceStack10:
+    Type: AWS::CloudFormation::Stack
+    Condition: Deploy10
+    DependsOn: SharedStack
+    Properties:
+      TemplateURL: https://raw.githubusercontent.com/CrypticDriver/openclaw-multi-deployment/master/cloudformation/03-openclaw-instance.yaml
+      Parameters:
+        FoundationStackName: !GetAtt FoundationStack.Outputs.StackName
+        SharedStackName: !GetAtt SharedStack.Outputs.StackName
+        InstanceName: !Sub '${InstanceNamePrefix}-10'
+        InstanceType: !Ref InstanceType
+        BedrockModel: !Ref BedrockModel
+        KeyPairName: !Ref KeyPairName
+        MinSize: !Ref MinSize
+        DesiredCapacity: !Ref DesiredCapacity
+        MaxSize: !Ref MaxSize
+        VolumeSize: !Ref VolumeSize
+        EnableDetailedMonitoring: !Ref EnableDetailedMonitoring
+        UseSpotInstances: !Ref UseSpotInstances
+      Tags:
+        - Key: Project
+          Value: OpenClaw-Multi
+
