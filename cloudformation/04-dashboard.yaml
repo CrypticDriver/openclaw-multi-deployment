@@ -52,6 +52,497 @@ Resources:
       Handler: index.lambda_handler
       Role: !GetAtt DashboardFunctionRole.Arn
       Timeout: 30
+      MemorySize: 512
+      Environment:
+        Variables:
+          REGION: !Ref AWS::Region
+          SHARED_STACK_NAME: !Ref SharedStackName
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+          from datetime import datetime, timedelta
+
+          cfn = boto3.client('cloudformation')
+          asg = boto3.client('autoscaling')
+          cw = boto3.client('cloudwatch')
+          ssm = boto3.client('ssm')
+          
+          REGION = os.environ['REGION']
+          SHARED_STACK = os.environ.get('SHARED_STACK_NAME', 'openclaw-shared')
+
+          def lambda_handler(event, context):
+              print(f"Event: {json.dumps(event)}")
+              
+              path = event.get('rawPath', event.get('path', '/'))
+              method = event.get('requestContext', {}).get('http', {}).get('method', 'GET')
+              
+              print(f"Path: {path}, Method: {method}")
+              
+              # CORS headers
+              cors_headers = {
+                  'Access-Control-Allow-Origin': '*',
+                  'Access-Control-Allow-Methods': 'GET,OPTIONS',
+                  'Access-Control-Allow-Headers': 'Content-Type'
+              }
+              
+              # Handle OPTIONS for CORS
+              if method == 'OPTIONS':
+                  return {
+                      'statusCode': 200,
+                      'headers': cors_headers,
+                      'body': ''
+                  }
+              
+              # Serve dashboard HTML
+              if path == '/' or path == '':
+                  return {
+                      'statusCode': 200,
+                      'headers': {
+                          'Content-Type': 'text/html; charset=utf-8',
+                          **cors_headers
+                      },
+                      'body': get_dashboard_html()
+                  }
+              
+              # API: List instances
+              elif path == '/api/instances':
+                  try:
+                      instances = list_instances()
+                      return {
+                          'statusCode': 200,
+                          'headers': {
+                              'Content-Type': 'application/json',
+                              **cors_headers
+                          },
+                          'body': json.dumps(instances, default=str)
+                      }
+                  except Exception as e:
+                      print(f"Error listing instances: {e}")
+                      return {
+                          'statusCode': 500,
+                          'headers': {
+                              'Content-Type': 'application/json',
+                              **cors_headers
+                          },
+                          'body': json.dumps({'error': str(e)})
+                      }
+              
+              # API: Get instance token
+              elif path.startswith('/api/token/'):
+                  try:
+                      instance_name = path.split('/')[-1]
+                      token = get_instance_token(instance_name)
+                      return {
+                          'statusCode': 200,
+                          'headers': {
+                              'Content-Type': 'application/json',
+                              **cors_headers
+                          },
+                          'body': json.dumps({'token': token, 'instance': instance_name})
+                      }
+                  except Exception as e:
+                      print(f"Error getting token: {e}")
+                      return {
+                          'statusCode': 500,
+                          'headers': {
+                              'Content-Type': 'application/json',
+                              **cors_headers
+                          },
+                          'body': json.dumps({'error': str(e)})
+                      }
+              
+              else:
+                  return {
+                      'statusCode': 404,
+                      'headers': cors_headers,
+                      'body': json.dumps({'error': 'Not Found', 'path': path})
+                  }
+
+          def list_instances():
+              instances = []
+              
+              try:
+                  # Get ALB URL
+                  alb_url = get_alb_url()
+                  print(f"ALB URL: {alb_url}")
+                  
+                  # List all CloudFormation stacks
+                  paginator = cfn.get_paginator('list_stacks')
+                  for page in paginator.paginate(StackStatusFilter=['CREATE_COMPLETE', 'UPDATE_COMPLETE']):
+                      for stack in page['StackSummaries']:
+                          stack_name = stack['StackName']
+                          
+                          # Skip non-instance stacks
+                          if not stack_name.startswith('openclaw-'):
+                              continue
+                          if stack_name in ['openclaw-foundation', 'openclaw-shared', 'openclaw-dashboard', SHARED_STACK]:
+                              continue
+                          
+                          # Get instance details
+                          instance_name = stack_name.replace('openclaw-', '')
+                          
+                          try:
+                              # Get stack outputs
+                              stack_details = cfn.describe_stacks(StackName=stack_name)['Stacks'][0]
+                              outputs = {o['OutputKey']: o['OutputValue'] for o in stack_details.get('Outputs', [])}
+                              
+                              asg_name = outputs.get('AutoScalingGroupName')
+                              
+                              if not asg_name:
+                                  print(f"No ASG found for {instance_name}")
+                                  continue
+                              
+                              # Get ASG details
+                              asg_response = asg.describe_auto_scaling_groups(
+                                  AutoScalingGroupNames=[asg_name]
+                              )
+                              
+                              if not asg_response['AutoScalingGroups']:
+                                  continue
+                                  
+                              asg_info = asg_response['AutoScalingGroups'][0]
+                              
+                              instances_count = len(asg_info['Instances'])
+                              healthy_count = len([i for i in asg_info['Instances'] if i['HealthStatus'] == 'Healthy'])
+                              desired = asg_info['DesiredCapacity']
+                              
+                              # Determine status
+                              if healthy_count == desired and desired > 0:
+                                  status = 'healthy'
+                              elif healthy_count > 0:
+                                  status = 'degraded'
+                              else:
+                                  status = 'unhealthy'
+                              
+                              # Get CPU if instances exist
+                              cpu = 'N/A'
+                              if asg_info['Instances']:
+                                  instance_id = asg_info['Instances'][0]['InstanceId']
+                                  end_time = datetime.utcnow()
+                                  start_time = end_time - timedelta(minutes=5)
+                                  
+                                  try:
+                                      cpu_data = cw.get_metric_statistics(
+                                          Namespace='AWS/EC2',
+                                          MetricName='CPUUtilization',
+                                          Dimensions=[{'Name': 'InstanceId', 'Value': instance_id}],
+                                          StartTime=start_time,
+                                          EndTime=end_time,
+                                          Period=300,
+                                          Statistics=['Average']
+                                      )
+                                      if cpu_data['Datapoints']:
+                                          cpu = f"{cpu_data['Datapoints'][0]['Average']:.1f}%"
+                                  except Exception as e:
+                                      print(f"Error getting CPU for {instance_id}: {e}")
+                              
+                              instances.append({
+                                  'name': instance_name,
+                                  'status': status,
+                                  'instances': instances_count,
+                                  'healthy': healthy_count,
+                                  'desired': desired,
+                                  'cpu': cpu,
+                                  'url': f"{alb_url}/{instance_name}/" if alb_url else f"/{instance_name}/",
+                                  'stackName': stack_name,
+                                  'createdTime': stack['CreationTime'].isoformat() if 'CreationTime' in stack else None
+                              })
+                              
+                          except Exception as e:
+                              print(f"Error processing {instance_name}: {e}")
+                              import traceback
+                              traceback.print_exc()
+                              continue
+              
+              except Exception as e:
+                  print(f"Error in list_instances: {e}")
+                  import traceback
+                  traceback.print_exc()
+              
+              return sorted(instances, key=lambda x: x['name'])
+
+          def get_alb_url():
+              try:
+                  response = cfn.describe_stacks(StackName=SHARED_STACK)
+                  outputs = response['Stacks'][0]['Outputs']
+                  for output in outputs:
+                      if output['OutputKey'] in ['LoadBalancerURL', 'ALBUrl', 'URL']:
+                          return output['OutputValue']
+                  return ''
+              except Exception as e:
+                  print(f"Error getting ALB URL: {e}")
+                  return ''
+
+          def get_instance_token(instance_name):
+              try:
+                  response = ssm.get_parameter(
+                      Name=f'/openclaw/{instance_name}/token',
+                      WithDecryption=True
+                  )
+                  return response['Parameter']['Value']
+              except Exception as e:
+                  print(f"Error getting token for {instance_name}: {e}")
+                  return None
+
+          def get_dashboard_html():
+              return '''<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenClaw Multi-Deployment Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header { text-align: center; color: white; margin-bottom: 40px; }
+        .header h1 { font-size: 2.5em; margin-bottom: 10px; }
+        .header p { font-size: 1.2em; opacity: 0.9; }
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: rgba(255,255,255,0.2);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 20px;
+            color: white;
+            text-align: center;
+        }
+        .stat-value { font-size: 2.5em; font-weight: bold; }
+        .stat-label { font-size: 0.9em; opacity: 0.9; margin-top: 5px; }
+        .instances-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+        .instance-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: transform 0.2s;
+        }
+        .instance-card:hover { transform: translateY(-5px); }
+        .instance-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .instance-name { font-size: 1.4em; font-weight: 600; color: #333; }
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 500;
+        }
+        .status-healthy { background: #d4edda; color: #155724; }
+        .status-degraded { background: #fff3cd; color: #856404; }
+        .status-unhealthy { background: #f8d7da; color: #721c24; }
+        .instance-info { margin-bottom: 20px; }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .info-label { color: #666; font-size: 0.9em; }
+        .info-value { color: #333; font-weight: 500; }
+        .btn {
+            width: 100%;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.95em;
+            font-weight: 500;
+            cursor: pointer;
+            background: #667eea;
+            color: white;
+            transition: all 0.2s;
+        }
+        .btn:hover { background: #5568d3; transform: translateY(-2px); }
+        .btn:disabled { background: #ccc; cursor: not-allowed; }
+        .loading {
+            text-align: center;
+            color: white;
+            font-size: 1.5em;
+            margin-top: 100px;
+        }
+        .error {
+            background: rgba(255,255,255,0.9);
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🐕 OpenClaw Multi-Deployment</h1>
+            <p>统一管理面板</p>
+        </div>
+        
+        <div class="stats-bar">
+            <div class="stat-card">
+                <div class="stat-value" id="total-instances">-</div>
+                <div class="stat-label">总实例数</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="healthy-instances">-</div>
+                <div class="stat-label">健康实例</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="total-capacity">-</div>
+                <div class="stat-label">总容量</div>
+            </div>
+        </div>
+        
+        <div id="loading" class="loading">加载中...</div>
+        <div id="error" class="error" style="display:none;"></div>
+        <div id="instances" class="instances-grid" style="display:none;"></div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        
+        async function loadInstances() {
+            try {
+                console.log('Fetching from:', API_BASE + '/api/instances');
+                const response = await fetch(API_BASE + '/api/instances');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const instances = await response.json();
+                console.log('Instances loaded:', instances);
+                
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'none';
+                document.getElementById('instances').style.display = 'grid';
+                
+                if (instances.length === 0) {
+                    document.getElementById('instances').innerHTML = '<div style="grid-column: 1/-1; text-align:center; color:white; padding:40px;"><h2>暂无实例</h2><p>部署第一个 OpenClaw 实例后会自动显示在这里</p></div>';
+                    updateStats(0, 0, 0);
+                    return;
+                }
+                
+                // Update stats
+                const total = instances.length;
+                const healthy = instances.filter(i => i.status === 'healthy').length;
+                const capacity = instances.reduce((sum, i) => sum + (i.instances || 0), 0);
+                updateStats(total, healthy, capacity);
+                
+                // Render instances
+                renderInstances(instances);
+                
+            } catch (error) {
+                console.error('Error loading instances:', error);
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
+                document.getElementById('error').textContent = '加载失败: ' + error.message + ' (检查 CloudWatch Logs 获取详情)';
+            }
+        }
+        
+        function updateStats(total, healthy, capacity) {
+            document.getElementById('total-instances').textContent = total;
+            document.getElementById('healthy-instances').textContent = healthy;
+            document.getElementById('total-capacity').textContent = capacity;
+        }
+        
+        function renderInstances(instances) {
+            const container = document.getElementById('instances');
+            container.innerHTML = instances.map(instance => `
+                <div class="instance-card">
+                    <div class="instance-header">
+                        <div class="instance-name">${instance.name}</div>
+                        <div class="status-badge status-${instance.status}">
+                            ${getStatusText(instance.status)}
+                        </div>
+                    </div>
+                    <div class="instance-info">
+                        <div class="info-row">
+                            <span class="info-label">实例数</span>
+                            <span class="info-value">${instance.healthy}/${instance.desired}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">CPU</span>
+                            <span class="info-value">${instance.cpu}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Stack</span>
+                            <span class="info-value" style="font-size:0.85em;">${instance.stackName}</span>
+                        </div>
+                    </div>
+                    <button class="btn" onclick="openInstance('${instance.name}', '${instance.url}')" id="btn-${instance.name}">
+                        打开 Web UI
+                    </button>
+                </div>
+            `).join('');
+        }
+        
+        function getStatusText(status) {
+            const map = {
+                'healthy': '✓ 健康',
+                'degraded': '⚠ 降级',
+                'unhealthy': '✗ 不健康'
+            };
+            return map[status] || status;
+        }
+        
+        async function openInstance(name, baseUrl) {
+            const btn = document.getElementById('btn-' + name);
+            const originalText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = '获取 Token...';
+            
+            try {
+                const response = await fetch(API_BASE + '/api/token/' + name);
+                const data = await response.json();
+                
+                if (data.token) {
+                    const url = baseUrl + '?token=' + data.token;
+                    window.open(url, '_blank');
+                    btn.textContent = '✓ 已打开';
+                    setTimeout(() => {
+                        btn.disabled = false;
+                        btn.textContent = originalText;
+                    }, 2000);
+                } else {
+                    throw new Error('无法获取 token');
+                }
+            } catch (error) {
+                alert('错误: ' + error.message);
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+        }
+        
+        // Load on page load
+        loadInstances();
+        
+        // Auto refresh every 30 seconds
+        setInterval(loadInstances, 30000);
+    </script>
+</body>
+</html>'''.strip()
+      Runtime: python3.11
+      Handler: index.lambda_handler
+      Role: !GetAtt DashboardFunctionRole.Arn
+      Timeout: 30
       MemorySize: 256
       Environment:
         Variables:
